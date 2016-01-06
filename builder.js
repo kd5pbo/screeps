@@ -7,12 +7,15 @@
  */
 
 var makeCreep = require("makeCreep");
-var collect   = require("collect");
 var errs      = require("errs");
 
-var ba = [WORK, CARRY, MOVE, MOVE, MOVE];
+var ba           = [CARRY, MOVE, WORK, MOVE]; /* Body array */
+var workMoveCost = 250;                       /* Cost of [WORK, MOVE] */
+var maxBP        = 50;                        /* Maximum number of parts */
 
 var repfrac = .75; /* Health below this indicates a need for repair */
+
+/* handleBuilders */
 
 /* handleBuilder handles the builder named n in room r. */
 function handleBuilder(n, r) {
@@ -20,7 +23,7 @@ function handleBuilder(n, r) {
         /* Make sure we have a builder */
         var c = Game.creeps[n];
         if ("undefined" === typeof(c)) {
-                return makeCreep(n, ba, "builder", r);
+                return makeBuilder(n, r);
         }
         
         /* Make sure we're not spawning */
@@ -28,9 +31,17 @@ function handleBuilder(n, r) {
                 return;
         }
 
+        /* If we're empty, try to collect more */
+        if (0 === c.carry.energy) {
+                collect(c);
+        }
+        /* If we still are, try again later */
+        if (0 === c.carry.energy) {
+                return;
+        }
 
-        /* Try to get energy, repair, and construct, in that order. */
-        if ((!collect(c)) || repair(c) || construct(c)) {
+        /* Try to get energy, construct, and repair, in that order. */
+        if (construct(c) || repair(c)) {
                 return;
         }
 
@@ -63,6 +74,12 @@ function construct(c) {
         /* Get the construction site */
         var cs = Game.getObjectById(c.memory.constructionsiteid);
         if (null === cs) {
+                c.memory.constructionsiteid = undefined;
+                return;
+        }
+        
+        /* If the construction site is constructed, try again next time */
+        if (cs.progress >= cs.progressTotal) {
                 c.memory.constructionsiteid = undefined;
                 return;
         }
@@ -155,33 +172,129 @@ function repair(c) {
  * c. */
 function nearestDamagedBuildingId(c) {
         var ts = [FIND_MY_SPAWNS, FIND_MY_STRUCTURES];
-        var ss = [];
         /* Try the various things that can be fixed */
         for (var i = 0; i < ts.length; ++i) {
                 /* Get a list of the ones that aren't healthy */
-                var is = c.room.find(ts[i], {filter: function(x) {
+                var is = c.pos.findClosestByPath(ts[i], {filter: function(x) {
                         return x.hits <= (x.hitsMax * repfrac);
                 }});
                 /* Return the ID of the nearest */
-                if (0 !== is.length) {
-                        ss = is;
-                        break;
+                if (null !== is) {
+                        return is.id;
                 }
-        }
-        /* Find walls and roads */
-        if (0 === ss.length) {
-                ss = c.room.find(FIND_STRUCTURES, {filter: function(x) {
-                        return (x.structureType == STRUCTURE_WALL ||
-                                x.structureType == STRUCTURE_ROAD) &&
-                                        (x.hits <= (x.hitsMax * repfrac));
-                }});
-        }
-        /* Work out which is closest */
-        if (0 !== ss.length) {
-                return c.pos.findClosestByRange(ss).id;
         }
         return undefined;
 }
 
-module.exports = handleBuilder;
+/* Collect sends creep in room r to the nearest spawn to collect energy.  It
+ * returns true if we're at capacity, or false if we need to collect more or
+ * move to a spawn (which collect will do). */
+function collect(c) {
+        /* If we're full, we're done */
+        if (c.carry.energy === c.carryCapacity) {
+                return true;
+        }
 
+        /* Get the storage or nearest spawn */
+        var ns = c.room.storage;
+        if (undefined === ns) {
+                ns = getNearestSpawn(c);
+                if (undefined === ns) {
+                        return false;
+                }
+        }
+
+        /* If we're not full, but not next to a spawn, that's ok */
+        if (!c.pos.isNearTo(ns) && 0 !== c.carry.energy) {
+                return true;
+        }
+
+        /* Try to collect */
+        var cr = ns.transferEnergy(c);
+        switch (cr) {
+                /* If we're full, unset the nearest spawn */
+                case ERR_FULL:
+                case ERR_NOT_ENOUGH_ENERGY:
+                case OK:
+                        break;
+                /* If we're too far, move to it */
+                case ERR_NOT_IN_RANGE:
+                        c.moveTo(ns);
+                        return false;
+                        break;
+                default:
+                        console.log(c.name + "> Unable to receive energy " +
+                                    "from " + ns.id + ": " + errs[cr]);
+                        break;
+        }
+
+        /* If we're full, we're done */
+        if (c.carry.energy === c.carryCapacity) {
+                return true;
+        }
+        return false;
+}
+
+/* getNearestSpawn gets the spawn nearest c when getNearestSpawn was first
+ * called with c.  If that spawn no longer exists, it finds the nearest one. */
+function getNearestSpawn(c) {
+        if ("undefined" !== typeof(c.memory.nearestSpawnId)) {
+                var ns = Game.getObjectById(c.memory.nearestSpawnId);
+                if (null === ns) {
+                        c.memory.nearestSpawnId = undefined;
+                        return getNearestSpawn(c);
+                }
+                return ns;
+        }
+        /* Get the list of spawns in the room */
+        var ss = c.room.find(FIND_MY_SPAWNS);
+        if (0 === ss.length) {
+                console.log(c.name + "> Can't find a spawn");
+                return undefined;
+        }
+        /* Find the nearest spawn */
+        var cs = c.pos.findClosestByPath(ss);
+        if (null === cs) {
+                console.log(c.name + "> Unable to get nearest spawn");
+                return undefined;
+        }
+        /* Save it */
+        c.memory.nearestSpawnId = cs.id;
+        return cs;
+}
+
+/* makeBuilder makes a building creep named n in room r */
+function makeBuilder(n, r) {
+        /* If we don't have storage, make the cheap model */
+        if (undefined === r.storage) {
+                return makeCreep(n, ba, "builder", r);
+        }
+        /* If we do, try to build as many building parts as we can */
+        var bba = ba.slice();
+        
+        /* Total storage in the room */
+        var ts = r.energyCapacityAvailable;
+
+        /* Subtract the storage in spawns */
+        var ss = r.find(FIND_MY_SPAWNS);
+        for (var i = 0; i < ss.length; ++i) {
+                ts -= ss[i].energyCapacity;
+        }
+
+        /* Subtract the parts of the body we already have */
+        for (var i = 0; i < bba.length; ++i) {
+                ts -= BODYPART_COST[bba[i]];
+        }
+
+        /* With the remaining budget, add work/move pairs */
+        while (ts >= workMoveCost && ((bba.length + 4) < maxBP)) {
+                bba.push(CARRY);
+                bba.push(MOVE);
+                bba.push(WORK);
+                bba.push(MOVE);
+                ts -= workMoveCost;
+        }
+
+        return makeCreep(n, bba, "builder", r);
+}
+module.exports = handleBuilder;

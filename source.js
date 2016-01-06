@@ -9,15 +9,15 @@
 var handleHarvester = require("harvester");
 var handleTruck = require("truck");
 
-/* Maximum number of harvesters needed at a source */
-var maxHarvesters = 3;
+var truckDist = 5; /* Allocate one truck for every this many tiles to the
+                    * nearest source */
+var maxTrucks = 5; /* Maximum number of trucks per source */
+var minTrucks = 2; /* Minimum number of trucks per source */
+var maxHarvesters = 5; /* Maximum number of harvesters needed at a source */
 
 /* Handles extracting energy from sources.  Expects a source as the sole
  * argument. */
-function handleSource(so){
-
-        /* Number of harvester spots */
-        var ns = nSpots(so);
+function handleSource(so, ntruck){
 
         /* Work out if the source is safe */
         if ("undefined" === typeof(Game.sourceIsSafe[so.id])) {
@@ -25,15 +25,33 @@ function handleSource(so){
                 Game.sourceIsSafe[so.id] = (0 === hs.length);
         }
 
-        /* Hande one harvester per spot */
-        for (var i = 0; i < ns; ++i) {
-                handleHarvester(so, i);
+        /* Allocate memory for this source */
+        if (undefined === Memory[so.id]) {
+                Memory[so.id] = {};
+        }
+
+        /* Work out how many trucks we need if we don't already know or if
+         * something changes. */
+        if (Game.newLargeStorage || (undefined === Memory[so.id].nTrucks)) {
+                Memory[so.id].nTrucks = nTrucks(so);
+        }
+        /* If we still don't have a number of trucks, that's bad */
+        if (undefined === Memory[so.id].nTrucks) {
+                console.log("Can't figure out how many trucks for " + so.id);
+                return
+        }
+
+        /* Have N trucks per source */
+        for (var i = 0; i < Memory[so.id].nTrucks; ++i) {
                 handleTruck(so, i);
         }
         
+        /* Harvest */
+        handleHarvester(so);
 }
 
 /* nSpots gets the number of spots available for harvesting for a source */
+/* DEAD */
 function nSpots(so) {
         var op = so.pos;
         /* Make sure we have memory for this source */
@@ -75,6 +93,40 @@ function nSpots(so) {
         Memory[so.id].nspots = ns > maxHarvesters ? maxHarvesters : ns;
 
         return Memory[so.id].nspots;
+}
+
+/* nTrucks works out how many trucks a source should have */
+function nTrucks(so) {
+        /* Get the room's spawns */
+        var ss = so.room.find(FIND_MY_SPAWNS);
+
+        /* Add in the storage */
+        if (undefined !== so.room.storage) {
+                ss.push(so.room.storage);
+        }
+
+        /* Find the closest by path */
+        var ns = so.pos.findClosestByPath(ss, {ignoreCreeps: true});
+        if (null === ns) {
+                return undefined;
+        }
+
+
+        /* Get that path */
+        var p = so.pos.findPathTo(ns, {ignoreCreeps: true});
+        if (0 === p.length) {
+                return undefined;
+        }
+
+        /* Work out how many trucks it allows */
+        var nt = Math.floor(p.length / truckDist);
+        if (nt <= minTrucks) {
+                return minTrucks;
+        }
+        if (nt >= maxTrucks) {
+                return maxTrucks;
+        }
+        return nt;
 }
 
 module.exports=handleSource;

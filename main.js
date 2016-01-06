@@ -3,19 +3,30 @@
  * Main screeps script
  * By J. Stuart McMurray
  * Created 20151212
- * Last Modified 20151222
+ * Last Modified 20151223
  */
 
-var handleSource  = require("source");
-var handleDefense = require("defense");
 var handleBuilder = require("builder");
+var handleDefense = require("defense");
 var handleHealer  = require("healer");
+var handleSource  = require("source");
+var handleStorage = require("storage");
+var handleTowers  = require("tower");
 
-var nDef   = 8; /* Number of defenders */
-var nHeal  = 4;  /* Number of healers */
-var nBuild = 5;  /* Number of builders */
+var nBuild = 3; /* Number of builders */
+var nDef   = 0; /* Number of defenders */
+var nHeal  = 0; /* Number of healers */
+var nTruck = 3; /* Number of trucks per source */
 
 module.exports.loop = function() {
+        switch (Memory.crashed) {
+                case true:
+                        console.log("CRASH!");
+                case undefined:
+                case false:
+                        Memory.crashed = true;
+                        break;
+        }
         /* Source -> safety mappings */
         Game.sourceIsSafe = {};
 
@@ -34,6 +45,23 @@ module.exports.loop = function() {
                         continue;
                 }
 
+                /* Note every time we've made a new storage or spawn */
+                var ns = r.find(FIND_MY_SPAWNS);
+                var ne = r.find(FIND_MY_STRUCTURES, {filter: function(x) {
+                        return STRUCTURE_EXTENSION === x.buildingType;
+                }})
+                var n = 0;
+                if (null !== ns) {
+                        n += ns.length;
+                }
+                if (null != ne) {
+                        n += ne.length;
+                }
+                if (r.memory.nSpawn !== n) {
+                        r.memory.nSpawn = n;
+                        Game.newLargeStorage = true;
+                }
+
                 /* Get hostile creeps and hostile moving creeps */
                 Game.hostileCreeps = r.find(FIND_HOSTILE_CREEPS);
                 Game.hostileMovingCreeps = r.find(FIND_HOSTILE_CREEPS, {
@@ -43,10 +71,16 @@ module.exports.loop = function() {
                 });
 
                 /* Handle sources */
-                var ss = r.find(FIND_SOURCES_ACTIVE)
+                var ss = r.find(FIND_SOURCES)
                 for (var i in ss) {
-                        handleSource(ss[i]);
+                        handleSource(ss[i], nTruck);
                 }
+
+                /* Move energy from the storage */
+                handleStorage(r.storage);
+
+                /* Let the towers tower */
+                handleTowers(r);
 
                 /* After all that, make a builder */
                 for (var i = 0; i < nBuild; ++i) {
@@ -64,6 +98,7 @@ module.exports.loop = function() {
                         handleDefense("defense-"+i, r);
                 }
 	}
+        Memory.crashed = false;
 }
 
 /* Check if we have a creep of the specified role in this room */
