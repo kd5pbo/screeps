@@ -18,11 +18,12 @@ while :; do
         fi
 
         # Find files that have changed since the last upload
-        FO=$(/usr/bin/find . -name '*.js' -newer $LASTUP -exec ls -ld {} +)
+        FO=$(/usr/bin/find . -name '*.js' -maxdepth 1 -newer $LASTUP -exec ls -ld {} +)
         # Upload if there's a change
         if [[ -n "$FO" ]]; then
                 echo "$FO"
-                /home/stuart/go/bin/screepssrc
+                /bin/cat *.js > main.screepsjs
+                /home/stuart/go/bin/screepssrc -e screepsjs
                 touch $LASTUP
         fi
 
