@@ -9,7 +9,7 @@
 /* Update list of room holders every this many ticks, for just in case */
 var updateHolders = 1000;
 
-var nBuild = {"W19S1": 7}; /* Number of builders per room */
+var nBuild = {"W19S1": 3}; /* Number of builders per room */
 
 module.exports.loop = function() {
         var rn; /* Room name */
@@ -253,7 +253,11 @@ function findABrokenStructureInRoom(r) {
         if (undefined !== Game.rcache[r.id].abstruct) {
                 return Game.rcache[r.id].abstruct;
         }
-        Game.rcache[r.id].abstruct = findBrokenInRoom(FIND_STRUCTURES, r);
+        var ab = r.find( FIND_STRUCTURES, {filter: function(x) {
+                return (STRUCTURE_ROAD === x.structureType) &&
+                        (x.hits + 200 <= x.hitsMax);
+        }});
+        Game.rcache[r.id].abstruct = (0 === ab.length) ? undefined : ab[0];
         return Game.rcache[r.id].abstruct;
 }
 
