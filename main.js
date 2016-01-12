@@ -249,16 +249,44 @@ function findABrokenStructureInRoom(r) {
         if (undefined === Game.rcache[r.id]) {
                 Game.rcache[r.id] = {};
         }
+        if (undefined === Game.rcache[r.id].structures) {
+                Game.rcache[r.id].structures = r.find(FIND_STRUCTURES);
+        }
         /* Try to use the cached version */
         if (undefined !== Game.rcache[r.id].abstruct) {
                 return Game.rcache[r.id].abstruct;
         }
-        var ab = r.find( FIND_STRUCTURES, {filter: function(x) {
+        var ab = _.filter(Game.rcache[r.id].structures, function(x) {
                 return (STRUCTURE_ROAD === x.structureType) &&
                         (x.hits + 200 <= x.hitsMax);
-        }});
-        Game.rcache[r.id].abstruct = (0 === ab.length) ? undefined : ab[0];
-        return Game.rcache[r.id].abstruct;
+        });
+        /* Return the road that needs fixing */
+        if (0 !== ab.length) {
+                Game.rcache[r.id].abstruct = ab[0];
+                return Game.rcache[r.id].abstruct;
+        }
+        /* Don't return walls or ramparts if we're not at GCL 4 */
+        if (4 > r.controller.level) {
+                return undefined;
+        }
+        /* Get all the walls and our ramparts */
+        var ab = _.filter(Game.rcache[r.id].structures, function(x) {
+                return ((STRUCTURE_RAMPART == x.structureType && x.my) || (STRUCTURE_WALL == x.structureType)) && x.hits + 200 <= x.hitsMax;
+        });
+        /* Give up if there's none */
+        if (0 === ab.length) {
+                return undefined;
+        }
+        /* Find the lowest-healthed */
+        var mini = 0;
+        for (var i = 1; i < ab.length; ++i) {
+                if (ab[mini].hits > ab[i].hits) {
+                        mini = i;
+                }
+        }
+        /* Cache it, return it */
+        Game.rcache[r.id].abstruct = ab[mini];
+        return ab[mini];
 }
 
 /* Find structures of STRUCTURE_* type t in Room r */

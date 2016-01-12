@@ -129,6 +129,7 @@ function findBiggestEnergyId(c) {
  * sufficient space */
 function depositEnergy(c) {
         var t;
+        console.log("DE: " + c);
         if (undefined === c.memory) {
                 console.log("CM Undef, spawning: " + c.spawning);
         }

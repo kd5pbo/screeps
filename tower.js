@@ -82,22 +82,9 @@ function handleTower(t) {
                 return t.heal(tgt);
         }
 
-        /* See if we've get anything of our own saved to fix */
-        if (undefined !== Memory.towers[t.id].aRepairID) {
-                /* Get the structure to heal */
-                tgt = Game.getObjectById(Memory.towers[t.id].aRepairID);
-                /* If it's still broke, fix it */
-                if (undefined !== tgt && tgt.hits < tgt.hitsMax) {
-                        return t.repair(tgt);
-                }
-                /* If not, note it and try something else */
-                Memory.towers[t.id].aRepairID = undefined;
-        }
-        
-        /* See if there's anything else we own to fix */
+        /* See if there's anything else to fix */
         tgt = findABrokenStructureInRoom(t.room);
         if (undefined !== tgt) {
-                Memory.towers[t.id].aRepairID = tgt.id;
                 return t.repair(tgt);
         }
 
