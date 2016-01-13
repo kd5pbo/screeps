@@ -9,7 +9,13 @@
 /* Update list of room holders every this many ticks, for just in case */
 var updateHolders = 1000;
 
-var nBuild = {"W19S1": 3}; /* Number of builders per room */
+/* Number of creeps of various types, per-room */
+var nCreep = {
+        "W19S1": {
+                "build": 2,
+                "truck": 3
+        }
+};
 
 module.exports.loop = function() {
         var rn; /* Room name */
@@ -49,15 +55,21 @@ function handleRoom(ro) {
         }
 
         /* Stick the harvested energy some place */
-        for (i = 0; i < ro.memory.sources.length; ++i) {
+        if (undefined === nCreep[ro.name]) {
+                nCreep[ro.name] = {};
+        }
+        if (undefined === nCreep[ro.name].truck) {
+                nCreep[ro.name].truck = 1;
+        }
+        for (i = 0; i < nCreep[ro.name].truck; ++i) {
                 handleTruck("t-" + ro.name + "-" + i, ro);
         }
 
         /* Use the harvested energy to build things */
-        if (undefined === nBuild[ro.name]) {
+        if (undefined === nCreep[ro.name].build) {
                 nBuild[ro.name] = 1;
         }
-        for (i = 0; i < nBuild[ro.name]; ++i) {
+        for (i = 0; i < nCreep[ro.name].build; ++i) {
                 handleBuilder("b-" + ro.name + "-" + i, ro);
         }
 
