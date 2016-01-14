@@ -12,7 +12,7 @@ var updateHolders = 1000;
 /* Number of creeps of various types, per-room */
 var nCreep = {
         "W19S1": {
-                "build": 2,
+                "build": 3,
                 "truck": 3
         }
 };
